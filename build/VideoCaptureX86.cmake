@@ -2,10 +2,6 @@ set(bd ${CMAKE_CURRENT_LIST_DIR}/..)
 set(sd ${bd}/src)
 set(id ${bd}/include/)
 
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-  set(debug_flag "_debug")
-endif()
-
 set(videocapture_sources 
   ${sd}/videocapture/Base.cpp
   ${sd}/videocapture/Capture.cpp
@@ -191,62 +187,9 @@ if(WIN32)
 endif()
 
 include_directories(${videocapture_include_dirs})
-add_library(videocapture${debug_flag} ${videocapture_sources})
-install(DIRECTORY ${bd}/include/videocapture DESTINATION include)
-install(TARGETS videocapture${debug_flag} ARCHIVE DESTINATION lib)
+add_library(videocapture STATIC ${videocapture_sources})
+target_link_libraries(videocapture ${videocapture_libraries})
 
 if (USE_DECKLINK)
-  add_dependencies(videocapture${debug_flag} DeckLinkAPI)
-endif()
-
-# Basic API example
-if(USE_OPENGL AND NOT USE_IOS)
-
-  # Plain OpenGL example
-  # add_executable(opengl_example ${sd}/opengl_example.cpp) 
-  # target_link_libraries(opengl_example ${videocapture_libraries} videocapture)
-  # add_dependencies(opengl_example videocapture)
-  # install(TARGETS opengl_example RUNTIME DESTINATION bin)
-
-  # Using the simple wrapper
-  add_executable(easy_opengl_example ${sd}/easy_opengl_example.cpp ${gl_sources}) 
-  target_link_libraries(easy_opengl_example ${videocapture_libraries} videocapture${debug_flag})
-  add_dependencies(easy_opengl_example videocapture${debug_flag})
-  install(TARGETS easy_opengl_example RUNTIME DESTINATION bin)
-
-endif()
-
-if (NOT USE_IOS)
-  add_executable(api_example ${sd}/api_example.cpp)
-  target_link_libraries(api_example ${videocapture_libraries} videocapture${debug_flag})
-  install(TARGETS api_example RUNTIME DESTINATION bin)
-
-  add_executable(test_conversion ${sd}/test_conversion.cpp)
-  target_link_libraries(test_conversion ${videocapture_libraries} videocapture${debug_flag})
-  install(TARGETS test_conversion RUNTIME DESTINATION bin)
-
-  add_executable(test_capability_filter ${sd}/test_capability_filter.cpp)
-  target_link_libraries(test_capability_filter ${videocapture_libraries} videocapture${debug_flag})
-  install(TARGETS test_capability_filter RUNTIME DESTINATION bin)
-      
-endif()
-
-if (UNIX AND NOT APPLE)
-  
-  # Experiment to retrieve device information using udev.
-  add_executable(test_v4l2_devices ${sd}/test_v4l2_devices.cpp)
-  target_link_libraries(test_v4l2_devices ${videocapture_libraries} videocapture${debug_flag})
-  install(TARGETS test_v4l2_devices RUNTIME DESTINATION bin)
-
-  # Test device list 
-  add_executable(test_linux_device_list ${sd}/test_linux_device_list.cpp)
-  target_link_libraries(test_linux_device_list ${videocapture_libraries} videocapture${debug_flag})
-  install(TARGETS test_linux_device_list RUNTIME DESTINATION bin)
-  
-endif()
-
-if (USE_DECKLINK)
-  add_executable(decklink_example ${sd}/decklink_example.cpp)
-  target_link_libraries(decklink_example ${videocapture_libraries} videocapture${debug_flag})
-  install(TARGETS decklink_example RUNTIME DESTINATION bin)
+  add_dependencies(videocapture DeckLinkAPI)
 endif()
