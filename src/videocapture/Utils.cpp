@@ -10,7 +10,7 @@ namespace ca {
 
     sprintf(buf, "%2.02f", r);
     sscanf(buf, "%f", &fps);
-    int v = (fps * 100);
+    int v = (int)(fps * 100);
 
     switch(v) {
       case CA_FPS_60_00: return CA_FPS_60_00;

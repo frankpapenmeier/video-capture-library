@@ -115,7 +115,7 @@ namespace ca {
               continue;
             }
         
-            ratio = double(capability.width) / capability.height;
+            ratio = float(capability.width) / capability.height;
             if (filter.value == ratio) {
               capability.filter_score += filter.priority;
             }

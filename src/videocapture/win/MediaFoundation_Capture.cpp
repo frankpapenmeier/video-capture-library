@@ -218,7 +218,7 @@ namespace ca {
       return -1;
     }
 
-    if(!state & CA_STATE_CAPTUREING) {
+    if(! (state & CA_STATE_CAPTUREING) ) {
       printf("Error: Cannot stop capture because we're not capturing yet.\n");
       return -2;
     }
