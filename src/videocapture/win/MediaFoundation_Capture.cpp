@@ -1,5 +1,6 @@
 #include <videocapture/win/MediaFoundation_Capture.h>
 #include <iostream>
+#include <math.h>
 
 namespace ca {
 
@@ -105,7 +106,9 @@ namespace ca {
       return -6;
     }
 
-    if(setDeviceFormat(imf_media_source, (DWORD)cap.pixel_format_index) < 0) {
+	int streamIndex = round((float)cap.pixel_format_index / 10000);
+	int formatIndex = cap.pixel_format_index - streamIndex * 10000;
+    if(setDeviceFormat(imf_media_source, (DWORD)streamIndex, (DWORD)formatIndex) < 0) {
       printf("Error: cannot set the device format.\n");
       safeReleaseMediaFoundation(&imf_media_source);
       return -7;
@@ -311,7 +314,9 @@ namespace ca {
   /* PLATFORM SDK SPECIFIC */
   /* -------------------------------------- */
 
-  int MediaFoundation_Capture::setDeviceFormat(IMFMediaSource* source, DWORD formatIndex) {
+  int MediaFoundation_Capture::setDeviceFormat(IMFMediaSource* source, DWORD streamIndex, DWORD formatIndex) {
+	  
+	  
 
     IMFPresentationDescriptor* pres_desc = NULL;
     IMFStreamDescriptor* stream_desc = NULL;
@@ -327,7 +332,7 @@ namespace ca {
     }
 
     BOOL selected;
-    hr = pres_desc->GetStreamDescriptorByIndex(0, &selected, &stream_desc);
+    hr = pres_desc->GetStreamDescriptorByIndex(streamIndex, &selected, &stream_desc);
     if(FAILED(hr)) {
       printf("pres_desc->GetStreamDescriptorByIndex failed.\n");
       result = -2;
@@ -416,7 +421,8 @@ namespace ca {
 
       Capability match_cap;
       IMFMediaType* type = NULL;
-      hr = imf_source_reader->GetNativeMediaType(0, media_type_index, &type);
+      DWORD streamIndex = (DWORD) round((float)cap.pixel_format_index / 10000);
+      hr = imf_source_reader->GetNativeMediaType(streamIndex, media_type_index, &type);
     
       if(SUCCEEDED(hr)) {
 
@@ -441,6 +447,8 @@ namespace ca {
             Unpack2UINT32AsUINT64(var.uhVal.QuadPart, &high, &low);
             match_cap.width = high;
             match_cap.height = low;
+          } else{
+            hr = S_OK;
           }
         }
         PropVariantClear(&var);
@@ -454,6 +462,8 @@ namespace ca {
             UINT32 low = 0;
             Unpack2UINT32AsUINT64(var.uhVal.QuadPart, &high, &low);
             match_cap.fps = fps_from_rational(low, high);
+          } else{
+            hr = S_OK;
           }
         }
         PropVariantClear(&var);
@@ -464,7 +474,7 @@ namespace ca {
            && match_cap.pixel_format == cap.pixel_format
            && match_cap.fps == cap.fps)
           {
-            hr = imf_source_reader->SetCurrentMediaType(0, NULL, type);
+            hr = imf_source_reader->SetCurrentMediaType(streamIndex, NULL, type);
             if(FAILED(hr)) {
               printf("Error: Failed to set the current media type for the given settings.\n");
             }
@@ -500,6 +510,7 @@ namespace ca {
     IMFStreamDescriptor* stream_desc = NULL;
     IMFMediaTypeHandler* media_handler = NULL;
     IMFMediaType* type = NULL;
+	PROPVARIANT var;
     int result = 1;
 
     HRESULT hr = source->CreatePresentationDescriptor(&presentation_desc);
@@ -508,126 +519,147 @@ namespace ca {
       result = -1;
       goto done;
     }
+	
+	DWORD cStreams = 0;
+	hr = presentation_desc->GetStreamDescriptorCount(&cStreams);
+	if (FAILED(hr)) {
+		printf("Error: cannot get stream descriptor count.\n");
+		result = -2;
+		goto done;
+	}
+	
+	int index = 0;
+	// Loop over all the streams
+	for (DWORD streamIndex = 0; streamIndex < cStreams; streamIndex++) {
+		BOOL selected;
+		hr = presentation_desc->GetStreamDescriptorByIndex(streamIndex, &selected, &stream_desc);
+		if(FAILED(hr)) {
+		  printf("Error: cannot get stream descriptor.\n");
+		  result = -3;
+		  goto done;
+		}
 
-    BOOL selected;
-    hr = presentation_desc->GetStreamDescriptorByIndex(0, &selected, &stream_desc);
-    if(FAILED(hr)) {
-      printf("Error: cannot get stream descriptor.\n");
-      result = -2;
-      goto done;
-    }
+		hr = stream_desc->GetMediaTypeHandler(&media_handler);
+		if(FAILED(hr)) {
+		  printf("Error: cannot get media type handler.\n");
+		  result = -4;
+		  goto done;
+		}
 
-    hr = stream_desc->GetMediaTypeHandler(&media_handler);
-    if(FAILED(hr)) {
-      printf("Error: cannot get media type handler.\n");
-      result = -3;
-      goto done;
-    }
+		DWORD types_count = 0;
+		hr = media_handler->GetMediaTypeCount(&types_count);
+		if(FAILED(hr)) {
+		  printf("Error: cannot get media type count.\n");
+		  result = -5;
+		  goto done;
+		}
 
-    DWORD types_count = 0;
-    hr = media_handler->GetMediaTypeCount(&types_count);
-    if(FAILED(hr)) {
-      printf("Error: cannot get media type count.\n");
-      result = -4;
-      goto done;
-    }
+	#if 0
+		// The list of supported types is not garantueed to return everything :) 
+		// this was a test to check if some types that are supported by my test-webcam
+		// were supported when I check them manually. (they didn't).
+		// See the Remark here for more info: http://msdn.microsoft.com/en-us/library/windows/desktop/bb970473(v=vs.85).aspx
+		IMFMediaType* test_type = NULL;
+		MFCreateMediaType(&test_type);
+		if(test_type) {
+		  GUID types[] = { MFVideoFormat_UYVY, 
+						   MFVideoFormat_I420,
+						   MFVideoFormat_IYUV, 
+						   MFVideoFormat_NV12, 
+						   MFVideoFormat_YUY2, 
+						   MFVideoFormat_Y42T,
+						   MFVideoFormat_RGB24 } ;
 
-#if 0
-    // The list of supported types is not garantueed to return everything :) 
-    // this was a test to check if some types that are supported by my test-webcam
-    // were supported when I check them manually. (they didn't).
-    // See the Remark here for more info: http://msdn.microsoft.com/en-us/library/windows/desktop/bb970473(v=vs.85).aspx
-    IMFMediaType* test_type = NULL;
-    MFCreateMediaType(&test_type);
-    if(test_type) {
-      GUID types[] = { MFVideoFormat_UYVY, 
-                       MFVideoFormat_I420,
-                       MFVideoFormat_IYUV, 
-                       MFVideoFormat_NV12, 
-                       MFVideoFormat_YUY2, 
-                       MFVideoFormat_Y42T,
-                       MFVideoFormat_RGB24 } ;
+		  test_type->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
+		  for(int i = 0; i < 7; ++i) {
+			test_type->SetGUID(MF_MT_SUBTYPE, types[i]);
+			hr = media_handler->IsMediaTypeSupported(test_type, NULL);
+			if(hr != S_OK) {
+			  printf("> Not supported: %d\n");
+			}
+			else {
+			  printf("> Yes, supported: %d\n", i);
+			}
+		  }
+		}
+		safeReleaseMediaFoundation(&test_type);
+	#endif
 
-      test_type->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
-      for(int i = 0; i < 7; ++i) {
-        test_type->SetGUID(MF_MT_SUBTYPE, types[i]);
-        hr = media_handler->IsMediaTypeSupported(test_type, NULL);
-        if(hr != S_OK) {
-          printf("> Not supported: %d\n");
-        }
-        else {
-          printf("> Yes, supported: %d\n", i);
-        }
-      }
-    }
-    safeReleaseMediaFoundation(&test_type);
-#endif
+		// Loop over all the types
+		for(DWORD i = 0; i < types_count; ++i) {
 
-    // Loop over all the types
-    PROPVARIANT var;
-    for(DWORD i = 0; i < types_count; ++i) {
+		  Capability cap;
 
-      Capability cap;
+		  hr = media_handler->GetMediaTypeByIndex(i, &type);
 
-      hr = media_handler->GetMediaTypeByIndex(i, &type);
+		  if(FAILED(hr)) {
+			printf("Error: cannot get media type by index.\n");
+			result = -6;
+			goto done;
+		  }
+		
+		  UINT32 attr_count = 0;
+		  hr = type->GetCount(&attr_count);
+		  if(FAILED(hr)) {
+			printf("Error: cannot type param count.\n");
+			result = -7;
+			goto done;
+		  }
 
-      if(FAILED(hr)) {
-        printf("Error: cannot get media type by index.\n");
-        result = -5;
-        goto done;
-      }
+		  if(attr_count > 0) {
+			for(UINT32 j = 0; j < attr_count; ++j) {
+
+			  GUID guid = { 0 };
+			  PropVariantInit(&var);
+
+			  hr = type->GetItemByIndex(j, &guid, &var);
+			  if(FAILED(hr)) {
+				printf("Error: cannot get item by index.\n");
+				result = -8;
+				goto done;
+			  }
+
+			  if(guid == MF_MT_SUBTYPE && var.vt == VT_CLSID) {
+				cap.pixel_format = media_foundation_video_format_to_capture_format(*var.puuid);
+				// We need to add the stream index to cap. We do not want to change the Capability interface.
+				// Let's store i and streamIndex into the same int
+				// The 4 last digits will be for i. The rest for streamIndex
+				cap.pixel_format_index = streamIndex * 10000 + i;
+			  }
+			  else if(guid == MF_MT_FRAME_SIZE) {
+				UINT32 high = 0;
+				UINT32 low =  0;
+				Unpack2UINT32AsUINT64(var.uhVal.QuadPart, &high, &low);
+				cap.width = (int)high;
+				cap.height = (int)low;
+			  }
+			  else if(guid == MF_MT_FRAME_RATE) {
+				  // @todo - use MF_MT_FRAME_RATE_RANGE_MIN and MF_MT_FRAME_RATE_RANGE_MAX to extract more FPS variants supported by the device - important: modify also setReaderFormat() 
+				  // @todo - not all FPS are added to the capability list. 
+				  UINT32 high = 0;
+				  UINT32 low =  0;
+				  Unpack2UINT32AsUINT64(var.uhVal.QuadPart, &high, &low);
+				  cap.fps = fps_from_rational(low, high);
+				  cap.fps_index = index;
+				}
+
+			  PropVariantClear(&var);
+			}
+
+			cap.capability_index = index;
+			caps.push_back(cap);
+		  }
+
+		  safeReleaseMediaFoundation(&type);
+		  
+		  index++;
+		}
+		
+		safeReleaseMediaFoundation(&stream_desc);
+		safeReleaseMediaFoundation(&media_handler);
+	}
+
     
-      UINT32 attr_count = 0;
-      hr = type->GetCount(&attr_count);
-      if(FAILED(hr)) {
-        printf("Error: cannot type param count.\n");
-        result = -6;
-        goto done;
-      }
-
-      if(attr_count > 0) {
-        for(UINT32 j = 0; j < attr_count; ++j) {
-
-          GUID guid = { 0 };
-          PropVariantInit(&var);
-
-          hr = type->GetItemByIndex(j, &guid, &var);
-          if(FAILED(hr)) {
-            printf("Error: cannot get item by index.\n");
-            result = -7;
-            goto done;
-          }
-
-          if(guid == MF_MT_SUBTYPE && var.vt == VT_CLSID) {
-            cap.pixel_format = media_foundation_video_format_to_capture_format(*var.puuid);
-            cap.pixel_format_index = i;
-          }
-          else if(guid == MF_MT_FRAME_SIZE) {
-            UINT32 high = 0;
-            UINT32 low =  0;
-            Unpack2UINT32AsUINT64(var.uhVal.QuadPart, &high, &low);
-            cap.width = (int)high;
-            cap.height = (int)low;
-          }
-          else if(guid == MF_MT_FRAME_RATE) {
-              // @todo - use MF_MT_FRAME_RATE_RANGE_MIN and MF_MT_FRAME_RATE_RANGE_MAX to extract more FPS variants supported by the device - important: modify also setReaderFormat() 
-			  // @todo - not all FPS are added to the capability list. 
-              UINT32 high = 0;
-              UINT32 low =  0;
-              Unpack2UINT32AsUINT64(var.uhVal.QuadPart, &high, &low);
-              cap.fps = fps_from_rational(low, high);
-              cap.fps_index = i;
-            }
-
-          PropVariantClear(&var);
-        }
-
-        cap.capability_index = i;
-        caps.push_back(cap);
-      }
-
-      safeReleaseMediaFoundation(&type);
-    }
 
   done: 
     safeReleaseMediaFoundation(&presentation_desc);
