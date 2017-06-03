@@ -56,7 +56,7 @@ namespace ca {
     int createSourceReader(IMFMediaSource* mediaSource, IMFSourceReaderCallback* callback, IMFSourceReader** sourceReader);   /* Create the IMFSourceReader which is basically an intermediate which allows us to process raw frames ourself. */
     int createVideoDeviceSource(int device, IMFMediaSource** source);                   /* Creates a new IMFMediaSource object that is activated */
     int getCapabilities(IMFMediaSource* source, std::vector<Capability>& result);       /* Get capabilities for the given source */
-    int setDeviceFormat(IMFMediaSource* source, DWORD formatIndex);                     /* Set the video capture format */
+    int setDeviceFormat(IMFMediaSource* source, DWORD streamIndex, DWORD formatIndex);  /* Set the video capture format */
     int setReaderFormat(IMFSourceReader* reader, Capability& cap);                      /* Set the format for the source reader. The source reader is used to process raw data, see: http://msdn.microsoft.com/en-us/library/windows/desktop/dd940436(v=vs.85).aspx for more information */
 
   public:
